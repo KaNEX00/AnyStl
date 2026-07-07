@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import HeartbeatKeepalive from "@/components/HeartbeatKeepalive";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,6 +36,7 @@ export default function RootLayout({
         className="min-h-full flex flex-col bg-[#0a0e1a] text-slate-200"
         suppressHydrationWarning
       >
+        <HeartbeatKeepalive />
         {children}
       </body>
     </html>

@@ -47,7 +47,7 @@ if not exist node_modules\.bin\playwright.cmd (
   call npm install || exit /b 1
 )
 
-echo Ensuring Playwright Chromium is installed...
+echo Ensuring Playwright Chromium is installed (used by backend scrapers)...
 call "node_modules\.bin\playwright.cmd" install chromium || exit /b 1
 
 if "%REBUILD%"=="1"           goto do_build
@@ -61,7 +61,8 @@ call npm run build || exit /b 1
 :skip_build
 echo.
 echo AnyStl is starting at %URL%
-echo Press Ctrl+C to stop (browser will close too).
+echo It will open in your default browser. Closing the tab shuts down the server.
+echo Or press Ctrl+C to stop.
 echo.
 
 if "%NO_OPEN%"=="1" set ANYSTL_NO_OPEN=1

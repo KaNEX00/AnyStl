@@ -47,7 +47,7 @@ if [ ! -x node_modules/.bin/playwright ]; then
   npm install
 fi
 
-echo "→ Ensuring Playwright Chromium is installed..."
+echo "→ Ensuring Playwright Chromium is installed (used by backend scrapers)..."
 ./node_modules/.bin/playwright install chromium
 
 if [ "$REBUILD" = "1" ] || [ ! -f .next/BUILD_ID ]; then
@@ -57,7 +57,8 @@ fi
 
 echo
 echo "AnyStl is starting at $URL"
-echo "Press Ctrl+C to stop (browser will close too)."
+echo "It will open in your default browser. Closing the tab shuts down the server."
+echo "Or press Ctrl+C to stop."
 echo
 
 export PORT

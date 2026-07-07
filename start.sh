@@ -57,8 +57,7 @@ fi
 
 echo
 echo "AnyStl is starting at $URL"
-echo "The app will open in your default browser."
-echo "Close the tab or press Ctrl+C to stop."
+echo "Press Ctrl+C to stop (browser will close too)."
 echo
 
 export PORT

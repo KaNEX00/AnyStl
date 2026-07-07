@@ -67,3 +67,4 @@ echo.
 if "%NO_OPEN%"=="1" set ANYSTL_NO_OPEN=1
 
 call node scripts\launch.mjs
+\r

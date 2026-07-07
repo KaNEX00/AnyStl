@@ -1,19 +1,20 @@
-// AnyStl launcher: owns the Next.js server and the browser window so that
-// closing one tears down the other. Used by start.sh and start.cmd.
+// AnyStl launcher: owns the Next.js server, opens the app in the user's
+// default browser, and polls a heartbeat endpoint so we can shut down when
+// the tab closes. Used by start.sh and start.cmd.
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { chromium } from 'playwright';
 
 const PORT = process.env.PORT || '3000';
 const URL = `http://localhost:${PORT}`;
 const NO_OPEN = process.env.ANYSTL_NO_OPEN === '1';
 
-const nextBin = process.platform === 'win32'
+const isWin = process.platform === 'win32';
+const isMac = process.platform === 'darwin';
+
+const nextBin = isWin
   ? 'node_modules\\.bin\\next.cmd'
   : 'node_modules/.bin/next';
-
-const isWin = process.platform === 'win32';
 
 const next = spawn(nextBin, ['start', '-p', PORT], {
   stdio: 'inherit',
@@ -23,7 +24,6 @@ const next = spawn(nextBin, ['start', '-p', PORT], {
   detached: !isWin,
 });
 
-let browser = null;
 let shuttingDown = false;
 
 function killNext(signal) {
@@ -46,10 +46,6 @@ function killNext(signal) {
 async function shutdown(code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
-  if (browser) {
-    try { await browser.close(); } catch {}
-    browser = null;
-  }
   if (next.exitCode === null) {
     killNext('SIGTERM');
     const timeout = sleep(5000).then(() => 'timeout');
@@ -78,28 +74,57 @@ async function waitForServer(url, timeoutMs = 60_000) {
   return false;
 }
 
+function openInDefaultBrowser(url) {
+  try {
+    if (isWin) {
+      // The empty "" is the window title arg for `start`, so a URL that
+      // contains spaces isn't mistakenly read as the title.
+      spawn('cmd', ['/c', 'start', '""', url], {
+        stdio: 'ignore',
+        detached: true,
+      }).unref();
+    } else if (isMac) {
+      spawn('open', [url], { stdio: 'ignore', detached: true }).unref();
+    } else {
+      spawn('xdg-open', [url], { stdio: 'ignore', detached: true }).unref();
+    }
+  } catch (err) {
+    console.error('Failed to open browser:', err?.message || err);
+    console.error(`Open ${url} manually to continue.`);
+  }
+}
+
+// Polls the heartbeat endpoint. Shuts down when the page has sent a goodbye
+// or when we've heard nothing for STALE_MS (after an initial grace period so
+// a slow first paint doesn't kill the server).
+async function watchHeartbeat() {
+  const endpoint = `${URL}/api/heartbeat`;
+  const POLL_MS = 2_000;
+  const STALE_MS = 10_000;
+  const GRACE_MS = 30_000;
+  const startedAt = Date.now();
+
+  while (!shuttingDown) {
+    await sleep(POLL_MS);
+    try {
+      const res = await fetch(endpoint, { method: 'GET' });
+      if (!res.ok) continue;
+      const { ageMs, goodbye } = await res.json();
+      if (goodbye) return shutdown(0);
+      if (Date.now() - startedAt > GRACE_MS && ageMs > STALE_MS) {
+        return shutdown(0);
+      }
+    } catch {
+      // Server unreachable — will be caught by the next-exit handler
+      // if it actually died; otherwise transient, keep polling.
+    }
+  }
+}
+
 if (!NO_OPEN) {
   const ready = await waitForServer(URL);
   if (ready && !shuttingDown) {
-    try {
-      browser = await chromium.launch({
-        headless: false,
-        args: ['--disable-blink-features=AutomationControlled'],
-      });
-      browser.on('disconnected', () => {
-        browser = null;
-        shutdown(0);
-      });
-      const context = await browser.newContext({ viewport: null });
-      const page = await context.newPage();
-      // Direct signal for "user closed the visible window/tab" — the
-      // browser process can linger briefly on Linux, so don't wait for
-      // 'disconnected' to fire.
-      page.on('close', () => shutdown(0));
-      context.on('close', () => shutdown(0));
-      await page.goto(URL).catch(() => {});
-    } catch (err) {
-      console.error('Failed to open browser:', err?.message || err);
-    }
+    openInDefaultBrowser(URL);
+    watchHeartbeat();
   }
 }
